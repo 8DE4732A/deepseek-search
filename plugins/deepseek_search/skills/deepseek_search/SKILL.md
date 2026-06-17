@@ -14,8 +14,7 @@ Do not use this skill for purely local codebase questions or for private/authent
 From the repository root, run:
 
 ```bash
-cd plugins/deepseek_search
-uv run src/deepseek_search.py --json --query "<specific search query>"
+uv run --directory ${CLAUDE_PLUGIN_ROOT} src/deepseek_search.py --json --query "<specific search query>"
 ```
 
 If the console script is available, this equivalent command is also valid from `plugins/deepseek_search`:
@@ -44,8 +43,7 @@ The CLI reads DeepSeek configuration from:
 Create a default config with:
 
 ```bash
-cd plugins/deepseek_search
-uv run src/deepseek_search.py --init
+uv run --directory ${CLAUDE_PLUGIN_ROOT} src/deepseek_search.py --init
 ```
 
 Then create `~/.deepseek/credentials.json` manually:
