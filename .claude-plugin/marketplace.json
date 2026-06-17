@@ -1,0 +1,15 @@
+{
+  "name": "deepseek_search",
+  "description": "deepseek api websearch能力",
+  "owner": {
+    "name": "8de4732a"
+  },
+  "plugins": [
+    {
+      "name": "deepseek_search",
+      "source": "./plugins/deepseek_search",
+      "description": "deepseek api websearch 能力封装"
+    }
+  ]
+}
+

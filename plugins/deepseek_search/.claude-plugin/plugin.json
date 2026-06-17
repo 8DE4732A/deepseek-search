@@ -1,0 +1,9 @@
+{
+  "name": "deepseek_search",
+  "version": "0.1.0",
+  "description": "封装deepseek api websearch 能力",
+   "author": {
+    "name": "8de4732a"
+  }
+}
+
