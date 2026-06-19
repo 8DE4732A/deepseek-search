@@ -1,0 +1,92 @@
+name: Publish to PyPI
+
+# Build and publish the deepseek-search package to PyPI whenever a version
+# git tag (matching `v*`) is pushed. Releases use PyPI Trusted Publishing
+# (OIDC), so no long-lived API tokens are stored as secrets.
+#
+# Prerequisite: register this project as a Trusted Publisher on PyPI.
+#   PyPI publishing environment: "pypi"
+#   GitHub repository:          8DE4732A/deepseek-search
+#   Workflow filename:          publish.yml
+#   Environment name:           pypi
+# See: https://docs.pypi.org/trusted-publishers/
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: # manual run for debugging (still needs the env to publish)
+
+permissions:
+  contents: read
+
+# Cancel a superseded in-flight publish for the same tag.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so setuptools-scm can resolve the version
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install build frontend
+        run: uv tool install build
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Verify the version matches the tag
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(python -c "import pathlib,glob; \
+            print(pathlib.Path(glob.glob('dist/*.tar.gz')[0]).name.split('-')[1].removesuffix('.tar.gz'))")
+          echo "tag version:   ${TAG}"
+          echo "built version: ${PKG_VERSION}"
+          if [ "${TAG}" != "${PKG_VERSION}" ]; then
+            echo "Version mismatch: tag ${TAG} != package ${PKG_VERSION}" >&2
+            exit 1
+          fi
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi # required for Trusted Publishing; add reviewers here if desired
+      url: https://pypi.org/project/deepseek-search/
+    permissions:
+      id-token: write # OIDC token for Trusted Publishing
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true

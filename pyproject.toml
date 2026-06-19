@@ -1,0 +1,56 @@
+[project]
+name = "deepseek-search"
+description = "DeepSeek Anthropic-compatible web search CLI for Claude Code"
+readme = "README.md"
+requires-python = ">=3.11"
+dynamic = ["version"]
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["deepseek", "web-search", "anthropic", "claude-code", "cli"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+  "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+  "anthropic>=0.92.0",
+]
+
+[project.scripts]
+deepseek-search = "deepseek_search:main"
+
+[project.urls]
+Homepage = "https://github.com/8DE4732A/deepseek-search"
+Repository = "https://github.com/8DE4732A/deepseek-search"
+Issues = "https://github.com/8DE4732A/deepseek-search/issues"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["deepseek_search"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools_scm]
+# Derive the package version from git tags (e.g. v0.1.0 -> 0.1.0).
+# CI sets this explicitly when building from a published tag.
+local_scheme = "no-local-version"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
