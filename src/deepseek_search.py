@@ -8,6 +8,7 @@ import os
 import stat
 import sys
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -267,6 +268,39 @@ def credentials_permission_warning(path: Path) -> str | None:
     return None
 
 
+def usage_path() -> Path:
+    return config_dir() / "usage.json"
+
+
+def load_usage() -> dict[str, Any]:
+    return read_json_file(usage_path())
+
+
+def save_usage(data: dict[str, Any]) -> None:
+    write_json_file(usage_path(), data)
+
+
+USAGE_FIELDS = [
+    ("Total requests:", "total_requests"),
+    ("Input tokens:", "input_tokens"),
+    ("Output tokens:", "output_tokens"),
+    ("Cache creation:", "cache_creation_input_tokens"),
+    ("Cache read:", "cache_read_input_tokens"),
+    ("Web search requests:", "web_search_requests"),
+]
+
+
+def update_usage(usage_data: dict[str, Any], model: str | None, api_usage: dict[str, Any]) -> None:
+    model = model or "unknown"
+    record = usage_data.setdefault(model, {})
+    record["total_requests"] = (record.get("total_requests") or 0) + 1
+    for field in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"):
+        record[field] = (record.get(field) or 0) + (api_usage.get(field) or 0)
+    web_reqs = api_usage.get("server_tool_use", {}).get("web_search_requests", 0)
+    record["web_search_requests"] = (record.get("web_search_requests") or 0) + web_reqs
+    record["last_request_time"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
 def load_settings(args: argparse.Namespace) -> Settings:
     directory = config_dir()
     cfg_path = directory / "config.json"
@@ -362,7 +396,7 @@ def add_search_arguments(parser: argparse.ArgumentParser) -> None:
     advanced.add_argument("--blocked-domain", action="append", help="Block a search domain; can be repeated")
 
 
-SUBCOMMANDS = {"search", "config"}
+SUBCOMMANDS = {"search", "config", "usage"}
 
 
 def inject_default_subcommand(argv: list[str]) -> list[str]:
@@ -413,6 +447,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     config_sub.add_parser("list", help="Print the full effective configuration (api_key masked)")
     config_sub.add_parser("show", help="Alias of 'list'")
+
+    usage_parser = subparsers.add_parser(
+        "usage",
+        help="Show API usage statistics",
+        description="Show per-model API usage statistics from ~/.deepseek/usage.json.",
+    )
+    usage_parser.add_argument("--model", help="Only show stats for a specific model")
+    usage_parser.add_argument("--json", action="store_true", help="Output as JSON")
+    usage_parser.add_argument("--reset", action="store_true", help="Reset (clear) all usage statistics")
 
     return parser
 
@@ -702,6 +745,12 @@ def run_search(args: argparse.Namespace, *, client: Any | None) -> int:
         output_format = settings.output_format
         api_client = client or create_client(settings)
         envelope = search(api_client, settings, query)
+        try:
+            usage_data = load_usage()
+            update_usage(usage_data, envelope.get("model", settings.model), envelope.get("usage", {}))
+            save_usage(usage_data)
+        except Exception:  # noqa: BLE001 - non-critical; never block the request.
+            pass
         if settings.verbose:
             print_verbose(envelope)
 
@@ -750,6 +799,41 @@ def run_config(args: argparse.Namespace) -> int:
         return exc.exit_code
 
 
+def run_usage(args: argparse.Namespace) -> int:
+    try:
+        if args.reset:
+            save_usage({})
+            print("Usage statistics have been reset.")
+            return 0
+
+        usage_data = load_usage()
+        if not usage_data:
+            print("No usage data recorded yet.")
+            return 0
+
+        if args.model:
+            if args.model not in usage_data:
+                raise CliError(f"No usage data found for model {args.model!r}", 1)
+            usage_data = {args.model: usage_data[args.model]}
+
+        if args.json:
+            print(json.dumps(usage_data, ensure_ascii=False, indent=2))
+            return 0
+
+        for model, record in sorted(usage_data.items()):
+            print(f"Model: {model}")
+            for label, key in USAGE_FIELDS:
+                print(f"  {label:22} {record.get(key, 0)}")
+            last_time = record.get("last_request_time")
+            if last_time:
+                print(f"  Last request:        {last_time}")
+            print()
+        return 0
+    except CliError as exc:
+        print(render_error(exc, None), file=sys.stderr)
+        return exc.exit_code
+
+
 def run(argv: list[str] | None = None, *, client: Any | None = None) -> int:
     raw_argv = list(argv if argv is not None else sys.argv[1:])
     argv = inject_default_subcommand(raw_argv)
@@ -758,6 +842,8 @@ def run(argv: list[str] | None = None, *, client: Any | None = None) -> int:
 
     if args.command == "config":
         return run_config(args)
+    if args.command == "usage":
+        return run_usage(args)
     # default / "search"
     return run_search(args, client=client)
 
